@@ -328,14 +328,30 @@ impl<T: ?Sized, Space> SmallBox<T, Space> {
     /// assert_eq!(*small_box, [1, 2, 3, 4]);
     /// ```
     pub fn from_box(boxed: ::alloc::boxed::Box<T>) -> Self {
-        unsafe {
-            let ptr = NonNull::new_unchecked(Box::into_raw(boxed));
-            let space = MaybeUninit::<UnsafeCell<Space>>::uninit();
-            SmallBox {
-                space,
-                ptr,
-                _phantom: PhantomData,
+        if !ptr::addr_eq(&*boxed, INLINE_SENTINEL) {
+            // Normally, just reuse allocation from box
+            unsafe {
+                // Safety: Box contains a non-null pointer
+                let ptr = NonNull::new_unchecked(Box::into_raw(boxed));
+                let space = MaybeUninit::<UnsafeCell<Space>>::uninit();
+
+                // Safety: ptr points to a valid allocation which doesn't start at 0 or 1
+                SmallBox {
+                    space,
+                    ptr,
+                    _phantom: PhantomData,
+                }
             }
+        } else {
+            // If box allocation somehow ended up starting at 1, reallocate instead
+
+            // Make sure to deallocate box when done, but don't call drop of T
+            let non_drop = Box::into_raw(boxed) as *mut ManuallyDrop<T>;
+            // Safety: ManuallyDrop<T> has same layout as T, and non_drop came from a box of T.
+            let boxed = unsafe { Box::from_raw(non_drop) };
+
+            // Safety: metadata is valid for value, and T isn't dropped from box after copy
+            unsafe { SmallBox::new_copy(&**boxed, &**boxed) }
         }
     }
 
