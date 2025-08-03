@@ -780,7 +780,7 @@ mod tests {
 
         let zst: SmallBox<OveralignedZst, S1> = smallbox!(OveralignedZst);
         #[allow(clippy::as_conversions)]
-        let zst_addr = addr_of!(*zst).addr();
+        let zst_addr = addr_of!(*zst) as usize;
         assert_eq!(*zst, OveralignedZst);
         assert_eq!(zst_addr % 512, 0);
     }
@@ -797,7 +797,7 @@ mod tests {
 
         let zst: SmallBox<dyn Foo, S1> = smallbox!(OveralignedZst);
         #[allow(clippy::as_conversions)]
-        let zst_addr = addr_of!(*zst).addr();
+        let zst_addr = addr_of!(*zst) as *const u8 as usize;
         assert_eq!(zst_addr % 512, 0);
     }
 
