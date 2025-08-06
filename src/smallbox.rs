@@ -174,12 +174,27 @@ impl<T: ?Sized, Space> SmallBox<T, Space> {
 
         let mut space = MaybeUninit::<UnsafeCell<Space>>::uninit();
 
-        let (ptr_this, val_dst): (*mut u8, *mut u8) = if size == 0 {
-            (
-                sptr::without_provenance_mut(align),
-                sptr::without_provenance_mut(align),
-            )
-        } else if size > mem::size_of::<Space>() || align > mem::align_of::<Space>() {
+        let (ptr_this, val_dst): (*mut u8, *mut u8) =
+            if layout.size() <= space_layout.size() && layout.align() <= space_layout.align() {
+                // Layout requirement satisfied; store on stack.
+                (ptr::null_mut(), space.as_mut_ptr().cast())
+            } else if layout.size() == 0 {
+                // ZST with unsatisfied alignment; pretend to store on the heap.
+                (
+                    sptr::without_provenance_mut(layout.align()),
+                    sptr::without_provenance_mut(layout.align()),
+                )
+            } else {
+                // Otherwise, allocate on the heap.
+                let layout = Layout::for_value::<U>(val);
+                let heap_ptr = alloc::alloc(layout);
+
+                if heap_ptr.is_null() {
+                    handle_alloc_error(layout)
+                }
+
+                (heap_ptr, heap_ptr)
+            };
             // Heap
             let layout = Layout::for_value::<U>(val);
             let heap_ptr = alloc::alloc(layout);
