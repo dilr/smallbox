@@ -135,7 +135,7 @@ impl<T: ?Sized, Space> SmallBox<T, Space> {
         let this = ManuallyDrop::new(self);
 
         if this.is_heap() {
-            // don't change anything if data is already on heap
+            // Do not change anything if data is already on heap.
             let space = MaybeUninit::<UnsafeCell<ToSpace>>::uninit();
             SmallBox {
                 space,
@@ -169,8 +169,8 @@ impl<T: ?Sized, Space> SmallBox<T, Space> {
 
     unsafe fn new_copy<U>(val: &U, metadata_ptr: *const T) -> SmallBox<T, Space>
     where U: ?Sized {
-        let size = mem::size_of_val(val);
-        let align = mem::align_of_val(val);
+        let layout = Layout::for_value(val);
+        let space_layout = Layout::new::<Space>();
 
         let mut space = MaybeUninit::<UnsafeCell<Space>>::uninit();
 
@@ -195,23 +195,11 @@ impl<T: ?Sized, Space> SmallBox<T, Space> {
 
                 (heap_ptr, heap_ptr)
             };
-            // Heap
-            let layout = Layout::for_value::<U>(val);
-            let heap_ptr = alloc::alloc(layout);
-
-            if heap_ptr.is_null() {
-                handle_alloc_error(layout)
-            }
-
-            (heap_ptr, heap_ptr)
-        } else {
-            (ptr::null_mut(), space.as_mut_ptr().cast())
-        };
 
         // `self.ptr` always holds the metadata, even if stack allocated.
         let ptr = sptr::with_metadata_of_mut(ptr_this, metadata_ptr);
 
-        ptr::copy_nonoverlapping(sptr::from_ref(val).cast(), val_dst, size);
+        ptr::copy_nonoverlapping(sptr::from_ref(val).cast(), val_dst, layout.size());
 
         SmallBox {
             space,
@@ -293,7 +281,7 @@ impl<T: ?Sized, Space> SmallBox<T, Space> {
         ret_val
     }
 
-    /// Creates a [`SmallBox`] from a standard [`Box`].
+    /// Creates a [`SmallBox`] from a [`Box`].
     ///
     /// The data will always be stored on the heap since it's already allocated there.
     /// This method transfers ownership from the [`Box`] to the [`SmallBox`] without copying
@@ -324,7 +312,7 @@ impl<T: ?Sized, Space> SmallBox<T, Space> {
         }
     }
 
-    /// Converts a [`SmallBox`] into a standard [`Box`].
+    /// Converts a [`SmallBox`] into a [`Box`].
     ///
     /// If the data is stored on the stack, it will be moved to the heap.
     /// If the data is already on the heap, ownership is transferred without
